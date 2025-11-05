@@ -1,0 +1,73 @@
+@import url('https://cdn.tailwindcss.com');
+
+body {
+    font-family: 'Inter', sans-serif;
+}
+.page {
+    display: none;
+}
+.page.active {
+    display: block;
+}
+/* Custom scrollbar for course player curriculum */
+.curriculum-sidebar::-webkit-scrollbar {
+    width: 6px;
+}
+.curriculum-sidebar::-webkit-scrollbar-track {
+    background: #f1f5f9;
+}
+.curriculum-sidebar::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 3px;
+}
+.curriculum-sidebar::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+}
+
+.aspect-video {
+    position: relative;
+    width: 100%;
+    padding-bottom: 56.25%; /* 16:9 aspect ratio */
+}
+
+.aspect-video iframe {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+}
+
+
+
+
+
+
+
+
+/* Smooth transitions for page switching */
+.page {
+    transition: opacity 0.3s ease;
+    opacity: 0;
+}
+.page.active {
+    opacity: 1;
+}
+
+/* Consistent background and text color */
+body {
+    background-color: #f8fafc; /* light gray background */
+    color: #1e293b; /* slate text */
+}
+
+
+
+
+#course-list {
+  min-height: 80vh;               /* Keeps layout stable during filtering */
+  transition: opacity 0.25s ease; /* Smooth fade animation */
+}
+
+.course-list-fade {
+  opacity: 0.3;                   /* Briefly fade during loading */
+}

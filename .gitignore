@@ -1,0 +1,5 @@
+# Sensitive config file
+/api/config.php
+
+# Composer packages
+/vendor/
