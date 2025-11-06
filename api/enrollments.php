@@ -2,6 +2,8 @@
 require_once "cors.php";
 require_once "db.php";
 
+header('Content-Type: application/json');
+
 try {
     // ✅ Handle GET request (Admin – return all enrollments)
     if ($_SERVER['REQUEST_METHOD'] === 'GET') {
