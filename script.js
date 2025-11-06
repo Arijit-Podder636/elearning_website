@@ -707,8 +707,7 @@ function showToast(message, type = 'info') {
 // 🆕 --- ADMIN STATS FETCH FUNCTION ---
 async function loadAdminStats() {
   try {
-    const response = await fetch("http://localhost/elearning/api/admin_stats.php");
-    const data = await response.json();
+    const data = await apiRequest('admin_stats.php');
     console.log("✅ Admin Stats Response:", data);
 
     if (data && data.success && data.stats) {
