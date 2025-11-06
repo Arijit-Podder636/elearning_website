@@ -86,4 +86,4 @@ To run this project on your own local machine (like XAMPP):
 
 5.  **Run:**
     Open your browser and navigate to `http://localhost/elearning/`. The application should now be fully functional.
-```eof
+
