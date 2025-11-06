@@ -1,19 +1,16 @@
 <?php
 require_once "cors.php";
-require_once "db.php";
+require_once "db.php"; // This file creates the $pdo object for you!
 
+// We can now use the $pdo object directly because db.php already made it.
 
 try {
-    // ✅ Database connection (your actual DB)
-    $pdo = new PDO("mysql:host=localhost;dbname=elearning", "root", "");
-    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-
-    // ✅ Ensure numeric results even if empty
+    // 1. Get stats
     $totalUsers = (int)$pdo->query("SELECT COUNT(id) FROM users")->fetchColumn();
     $totalCourses = (int)$pdo->query("SELECT COUNT(id) FROM courses")->fetchColumn();
     $totalEnrollments = (int)$pdo->query("SELECT COUNT(id) FROM enrollments")->fetchColumn();
 
-    // ✅ Fetch chart data (Courses vs Enrollments)
+    // 2. Fetch chart data
     $chartQuery = $pdo->prepare("
         SELECT 
             c.title AS courseTitle, 
@@ -26,7 +23,8 @@ try {
     $chartQuery->execute();
     $chartData = $chartQuery->fetchAll(PDO::FETCH_ASSOC);
 
-    // ✅ Return JSON
+    // 3. Return JSON
+    header('Content-Type: application/json'); // Make sure to send as JSON
     echo json_encode([
         'success' => true,
         'stats' => [
@@ -38,6 +36,8 @@ try {
     ]);
 
 } catch (PDOException $e) {
+    // This will catch query errors
+    header('Content-Type: application/json'); // Make sure to send as JSON
     echo json_encode([
         'success' => false,
         'message' => 'Database query failed.',
