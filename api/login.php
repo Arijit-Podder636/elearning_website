@@ -2,6 +2,8 @@
 require_once "cors.php";
 require_once "db.php";
 
+header('Content-Type: application/json');
+
 // Decode JSON body
 $data = json_decode(file_get_contents('php://input'), true);
 
@@ -79,6 +81,7 @@ try {
         echo json_encode(['success' => false, 'message' => 'Invalid email or password.']);
     }
 } catch (PDOException $e) {
+    header('Content-Type: application/json');
     echo json_encode(['success' => false, 'message' => 'Database error: ' . $e->getMessage()]);
 }
 ?>
