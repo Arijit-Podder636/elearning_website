@@ -49,7 +49,7 @@ To run this project on your own local machine (like XAMPP):
 
 1.  **Clone the Repository:**
     ```bash
-    git clone [https://github.com/Arijit-Podder636/elearning_website.git](https://github.com/Arijit-Podder636/elearning_website.git)
+    git clone https://github.com/Arijit-Podder636/elearning_website.git
     cd elearning_website
     ```
 
