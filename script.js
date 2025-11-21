@@ -113,15 +113,18 @@ window.addEventListener('load', () => {
 
 // --- PAGE NAVIGATION ---
 function showPage(pageId) {
+    // hide all pages
     pages.forEach(page => page.classList.remove('active'));
-    document.getElementById(pageId).classList.add('active');
+    const target = document.getElementById(pageId);
+    if (target) target.classList.add('active');
+
     window.scrollTo(0, 0);
 
     appContainer.classList.add('container', 'mx-auto', 'max-w-screen-2xl');
-    
+
     // Desktop nav links
-    const homeLink = document.querySelector('[onclick="showPage(\'home-page\')"]');
-    const dashboardLink = document.querySelector('[onclick="showPage(\'dashboard-page\')"]');
+    const homeLink = document.querySelector('nav#nav-links a[onclick="showPage(\'home-page\')"]');
+    const dashboardLink = document.querySelector('nav#nav-links a[onclick="showPage(\'dashboard-page\')"]');
     const adminLink = document.getElementById('admin-link');
 
     // Mobile nav links
@@ -129,37 +132,40 @@ function showPage(pageId) {
     const mobileDashboardLink = document.getElementById('mobile-dashboard-link');
     const adminLinkMobile = document.getElementById('admin-link-mobile');
 
-
-        if (currentUser) {
-        // Show header and greet user
+    if (currentUser) {
+        // show header + greeting
         header.classList.remove('hidden');
         header.classList.add('flex');
-        document.getElementById('user-greeting').textContent = `${currentUser.name.split(' ')[0]}`;
-        
+
+        const greetEl = document.getElementById('user-greeting');
+        if (greetEl && currentUser.name) {
+            greetEl.textContent = currentUser.name.split(' ')[0];
+        }
+
         const isAdmin = currentUser.role === 'admin';
-        
-        // Desktop links
+
+        // desktop
         if (homeLink) homeLink.classList.toggle('hidden', isAdmin);
         if (dashboardLink) dashboardLink.classList.toggle('hidden', isAdmin);
         if (adminLink) adminLink.classList.toggle('hidden', !isAdmin);
 
-        // Mobile links
+        // mobile
         if (mobileHomeLink) mobileHomeLink.classList.toggle('hidden', isAdmin);
         if (mobileDashboardLink) mobileDashboardLink.classList.toggle('hidden', isAdmin);
         if (adminLinkMobile) adminLinkMobile.classList.toggle('hidden', !isAdmin);
 
     } else {
-        // No user, hide header
         header.classList.add('hidden');
         header.classList.remove('flex');
     }
 
-    // Load content for the specific page
-    if(pageId === 'home-page') renderCourses();
-    if(pageId === 'dashboard-page') renderDashboard();
-    if(pageId === 'admin-page') showAdminSection('admin-overview');
-    if(pageId === 'profile-page') renderProfilePage();
+    // load content for specific page
+    if (pageId === 'home-page') renderCourses();
+    if (pageId === 'dashboard-page') renderDashboard();
+    if (pageId === 'admin-page') showAdminSection('admin-overview');
+    if (pageId === 'profile-page') renderProfilePage();
 }
+
 
 
 
@@ -207,56 +213,37 @@ async function handleLogin() {
     const password = document.getElementById('login-password').value;
     const errorEl = document.getElementById('login-error');
 
+    errorEl.textContent = ''; // clear old error
+
     const response = await apiRequest('login.php', 'POST', { email, password });
+
+    if (!response || typeof response !== 'object') {
+        errorEl.textContent = 'Unexpected server response.';
+        return;
+    }
 
     if (response.success) {
         currentUser = response.user;
         sessionStorage.setItem('currentUser', JSON.stringify(currentUser));
 
+        // show the correct page based on role
         if (currentUser.role === 'admin') {
-            // 🔥 Admin detected — show only admin dashboard
             showPage('admin-page');
             loadAdminStats();
-
-            // Hide unnecessary pages and navigation links
-            document.getElementById('home-page')?.classList.add('hidden');
-            document.getElementById('dashboard-page')?.classList.add('hidden');
-            document.getElementById('course-player-page')?.classList.add('hidden');
-
-            // Hide "Home" and "My Dashboard" links in header
-            document.querySelector('[onclick="showPage(\'home-page\')"]')?.classList.add('hidden');
-            document.querySelector('[onclick="showPage(\'dashboard-page\')"]')?.classList.add('hidden');
-
-            // Show admin nav link
-            document.getElementById('admin-link')?.classList.remove('hidden');
-
-            // Show header and hide auth page
-            document.getElementById('header').classList.remove('hidden');
-            document.getElementById('auth-page').classList.remove('active');
-            document.getElementById('auth-page').classList.add('hidden');
-
-            showToast('Logged in as Admin');
+            showToast('Logged in as Admin', 'success');
         } else {
-            // 🧑‍🎓 Normal user flow
             showPage('home-page');
+            showToast('Login successful', 'success');
         }
     } else {
-        // --- ⬇️ THIS IS THE UPDATED PART ⬇️ ---
-
-        // 1. Show the error message from the server
+        // show backend error
         errorEl.textContent = response.message || 'Login failed.';
-        
-        // 2. (NEW) Check if the error is the "not verified" message
-        if (response.message && response.message.includes('not verified')) {
-            // If it is, redirect the user to the OTP form!
-            
-            // 3. Put the email they just typed into the hidden OTP form
+
+        // if account not verified, move to OTP view
+        if (response.message && response.message.toLowerCase().includes('not verified')) {
             document.getElementById('otp-email').value = email;
-            
-            // 4. Show the OTP verification view
             showAuthView('otp');
         }
-        
     }
 }
 
@@ -475,13 +462,15 @@ function togglePasswordVisibility(inputId, iconId) {
 
 
 function toggleUserMenu() { 
-    document.getElementById('user-menu').classList.toggle('hidden'); 
+    const menu = document.getElementById('user-menu');
+    if (menu) menu.classList.toggle('hidden'); 
 }
+
 function toggleMobileMenu() {
     const menu = document.getElementById('mobile-nav');
-    if (!menu) return;
-    menu.classList.toggle('hidden');
+    if (menu) menu.classList.toggle('hidden');
 }
+
 
 // --- COURSE & DASHBOARD RENDERING ---
 async function renderCourses(filter = '') {
@@ -1115,7 +1104,6 @@ window.handleRegistration = handleRegistration;
 window.handleLogin = handleLogin;
 window.handleVerifyOTP = handleVerifyOTP; 
 window.logout = logout;
-window.loginAsAdmin = loginAsAdmin;
 window.toggleUserMenu = toggleUserMenu;
 window.togglePasswordVisibility = togglePasswordVisibility;
 window.handleChangePassword = handleChangePassword;
