@@ -1,3 +1,6 @@
+UPDATED SCRIPT.JS
+
+
 // --- STATE MANAGEMENT ---
 let currentUser = null;
 let currentCourseId = null;
@@ -116,26 +119,34 @@ function showPage(pageId) {
 
     appContainer.classList.add('container', 'mx-auto', 'max-w-screen-2xl');
     
-    // --- ⬇️ (NEW) Get link elements ⬇️ ---
+    // Desktop nav links
     const homeLink = document.querySelector('[onclick="showPage(\'home-page\')"]');
     const dashboardLink = document.querySelector('[onclick="showPage(\'dashboard-page\')"]');
     const adminLink = document.getElementById('admin-link');
-    // --- ⬆️ (NEW) ----------------------- ⬆️ ---
 
-    if (currentUser) {
+    // Mobile nav links
+    const mobileHomeLink = document.getElementById('mobile-home-link');
+    const mobileDashboardLink = document.getElementById('mobile-dashboard-link');
+    const adminLinkMobile = document.getElementById('admin-link-mobile');
+
+
+        if (currentUser) {
         // Show header and greet user
         header.classList.remove('hidden');
         header.classList.add('flex');
         document.getElementById('user-greeting').textContent = `${currentUser.name.split(' ')[0]}`;
         
-        // --- ⬇️ THIS IS THE FIX ⬇️ ---
-        // Check role and show/hide the correct links on EVERY page load
         const isAdmin = currentUser.role === 'admin';
         
+        // Desktop links
         if (homeLink) homeLink.classList.toggle('hidden', isAdmin);
         if (dashboardLink) dashboardLink.classList.toggle('hidden', isAdmin);
         if (adminLink) adminLink.classList.toggle('hidden', !isAdmin);
-        // --- ⬆️ END OF FIX ⬆️ ---
+
+        // Mobile links
+        if (mobileHomeLink) mobileHomeLink.classList.toggle('hidden', isAdmin);
+        if (mobileDashboardLink) mobileDashboardLink.classList.toggle('hidden', isAdmin);
+        if (adminLinkMobile) adminLinkMobile.classList.toggle('hidden', !isAdmin);
 
     } else {
         // No user, hide header
@@ -465,6 +476,11 @@ function togglePasswordVisibility(inputId, iconId) {
 
 function toggleUserMenu() { 
     document.getElementById('user-menu').classList.toggle('hidden'); 
+}
+function toggleMobileMenu() {
+    const menu = document.getElementById('mobile-nav');
+    if (!menu) return;
+    menu.classList.toggle('hidden');
 }
 
 // --- COURSE & DASHBOARD RENDERING ---
@@ -1091,6 +1107,7 @@ window.showAdminSection = showAdminSection;
 window.renderCourses = renderCourses;
 window.renderAdminUsers = renderAdminUsers;
 window.renderAdminCourses = renderAdminCourses;
+window.toggleMobileMenu = toggleMobileMenu;
 
 // --- ADD THESE NEW FUNCTIONS ---
 window.showAuthView = showAuthView; 
