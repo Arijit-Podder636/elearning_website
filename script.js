@@ -19,7 +19,7 @@ const courseTitleSidebarEl = document.getElementById('course-title-sidebar');
 const appContainer = document.getElementById('app');
 
 // --- API COMMUNICATION ---
-const API_BASE_URL = "api/";
+const API_BASE_URL = "https://eduverse.rf.gd/api/";
 
 async function apiRequest(endpoint, method = 'GET', body = null) {
     const options = {
