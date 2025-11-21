@@ -26,54 +26,34 @@ try {
     $user = $stmt->fetch(PDO::FETCH_ASSOC); // Use FETCH_ASSOC to work with array keys
 
     // 1. Check if user exists AND password is correct
-    if ($user && password_verify($password, $user['password'])) {
+if ($user && password_verify($password, $user['password'])) {
 
-        // --- ⬇️ UPDATED LOGIC TO BYPASS ADMIN OTP ⬇️ ---
-        
-        // 2. Check user's role. If 'admin', log them in directly.
-        if ($user['role'] == 'admin') {
-            
-            // --- ADMIN SUCCESS ---
-            unset($user['password']); 
-            
-            $response = [
-                'success' => true,
-                'user' => [
-                    'id' => $user['id'],
-                    'name' => $user['name'],
-                    'email' => $user['email'],
-                    'role' => $user['role'] 
-                ]
-            ];
-            
-            echo json_encode($response);
-        
-        // 3. If user is NOT an admin, check if they are verified.
-        } elseif ($user['is_verified'] == 1) {
-            
-            // --- STUDENT SUCCESS (Verified) ---
-            unset($user['password']);
-            
-            $response = [
-                'success' => true,
-                'user' => [
-                    'id' => $user['id'],
-                    'name' => $user['name'],
-                    'email' => $user['email'],
-                    'role' => $user['role'] 
-                ]
-            ];
-            
-            echo json_encode($response);
+    // ✅ Admin OR verified student → login allowed
+    if ($user['role'] === 'admin' || $user['is_verified'] == 1) {
 
-        } else {
-            // --- FAILED (Student is not verified) ---
-            echo json_encode([
-                'success' => false, 
-                'message' => 'Your account is not verified. Please check your email (and spam folder) for the verification code.'
-            ]);
-        }
-        // --- ⬆️ END OF UPDATED LOGIC ⬆️ ---
+        unset($user['password']);
+
+        echo json_encode([
+            'success' => true,
+            'user' => [
+                'id'    => $user['id'],
+                'name'  => $user['name'],
+                'email' => $user['email'],
+                'role'  => $user['role']
+            ]
+        ]);
+        exit;   // <-- important so nothing extra prints
+
+    } else {
+        // ❌ Student exists and password correct, but NOT verified
+        echo json_encode([
+            'success' => false,
+            'message' => 'Your account is not verified. Please check your email (and spam folder) for the verification code.'
+        ]);
+        exit;   // <-- important
+    }
+}
+
 
     } else {
         // --- FAILED (BAD LOGIN) ---
