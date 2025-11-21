@@ -3,10 +3,11 @@ let currentUser = null;
 let currentCourseId = null;
 let currentLessonIndex = 0;
 
-// Global chart instance
+// ✅ Global chart instance to prevent multiple canvas conflicts
 let enrollmentChartInstance = null;
 
-// --- DOM ELEMENTS (available because script is at bottom of body) ---
+
+// --- DOM ELEMENTS ---
 const pages = document.querySelectorAll('.page');
 const header = document.getElementById('header');
 const searchBar = document.getElementById('search-bar');
@@ -19,16 +20,15 @@ const courseTitleSidebarEl = document.getElementById('course-title-sidebar');
 const appContainer = document.getElementById('app');
 
 // --- API COMMUNICATION ---
-const API_BASE_URL = "/api/";
-
-
+const API_BASE_URL = "api/";
 async function apiRequest(endpoint, method = 'GET', body = null) {
     const options = {
-        method,
+        method: method,
         headers: { 'Content-Type': 'application/json' },
     };
-    if (body) options.body = JSON.stringify(body);
-
+    if (body) {
+        options.body = JSON.stringify(body);
+    }
     try {
         const response = await fetch(`${API_BASE_URL}${endpoint}`, options);
         if (!response.ok) {
@@ -37,179 +37,252 @@ async function apiRequest(endpoint, method = 'GET', body = null) {
         return await response.json();
     } catch (error) {
         console.error(`API request failed for ${endpoint}:`, error);
-        showToast('A network or server error occurred. Check console.', 'error');
+        showToast('A network or server error occurred. Please check the console.', 'error');
         return { success: false, message: 'Network error.' };
     }
 }
 
-// --- HELPERS ---
+
+
+
+
+// --- Robust startup + real-time course search (drop-in) ---
+
+// Debounce helper to avoid firing API on every keystroke
 function debounce(fn, wait = 250) {
-    let t;
-    return (...args) => {
-        clearTimeout(t);
-        t = setTimeout(() => fn(...args), wait);
-    };
+  let t;
+  return (...args) => {
+    clearTimeout(t);
+    t = setTimeout(() => fn(...args), wait);
+  };
 }
 
-// --- INITIALIZATION ---
+
+
+
+
+
+
+// Restore session user on page load (if any)
 window.addEventListener('load', () => {
-    // Restore session user if present
-    try {
-        const stored = sessionStorage.getItem('currentUser');
-        if (stored) currentUser = JSON.parse(stored);
-    } catch (e) {
-        console.warn('Could not parse stored currentUser:', e);
+  try {
+    const stored = sessionStorage.getItem('currentUser');
+    if (stored) {
+      currentUser = JSON.parse(stored);
     }
+  } catch (e) {
+    console.warn('Could not parse stored currentUser:', e);
+  }
 
-    if (currentUser) {
-        if (currentUser.role === 'admin') {
-            showPage('admin-page');
-        } else {
-            showPage('home-page');
-        }
+  // --- ⬇️ THIS IS THE FIX ⬇️ ---
+  // Show appropriate page after restoring user
+  if (currentUser) {
+    // Check the user's role on load
+    if (currentUser.role === 'admin') {
+        showPage('admin-page'); // Admins go to the admin page
     } else {
-        showPage('auth-page');
+        showPage('home-page'); // Students go to the home page
     }
+  } else {
+    showPage('auth-page');
+  }
+  // --- ⬆️ END OF FIX ⬆️ ---
 
-    // Attach real-time search (home page)
-    if (searchBar) {
-        searchBar.addEventListener(
-            'input',
-            debounce((e) => {
-                const q = (e.target.value || '').trim();
-                renderCourses(q);
-            }, 300)
-        );
-    }
-
-    // Attach admin course search
-    const adminSearch = document.getElementById('course-search-bar-admin');
-    if (adminSearch) {
-        adminSearch.addEventListener('input', (e) => {
-            renderAdminCourses(e.target.value.trim());
-        });
-    }
-
-    // Initial admin courses load (if admin)
-    renderAdminCourses();
+  // Attach real-time search (debounced)
+  const sb = document.getElementById('search-bar');
+  if (sb) {
+    sb.addEventListener('input', debounce((e) => {
+      // use trimmed value
+      const q = (e.target.value || '').trim();
+      renderCourses(q);
+    }, 300));
+  } else {
+    console.warn('#search-bar element not found');
+  }
+  
+  // ⬇️ ADD THIS LINE ⬇️
+  // Attach listener for the hamburger menu
+  document.getElementById('hamburger-btn').addEventListener('click', toggleMobileMenu);
 });
+
+
+
+
+
+
+
 
 // --- PAGE NAVIGATION ---
 function showPage(pageId) {
-    // hide all pages
     pages.forEach(page => page.classList.remove('active'));
-    const target = document.getElementById(pageId);
-    if (target) target.classList.add('active');
-
+    document.getElementById(pageId).classList.add('active');
     window.scrollTo(0, 0);
 
-    if (appContainer) {
-        appContainer.classList.add('container', 'mx-auto', 'max-w-screen-2xl');
-    }
-
-    // Desktop nav links
-    const homeLink = document.querySelector('nav#nav-links a[onclick="showPage(\'home-page\')"]');
-    const dashboardLink = document.querySelector('nav#nav-links a[onclick="showPage(\'dashboard-page\')"]');
+    appContainer.classList.add('container', 'mx-auto', 'max-w-screen-2xl');
+    
+    // --- ⬇️ (NEW) Get link elements ⬇️ ---
+    const homeLink = document.querySelector('[onclick="showPage(\'home-page\')"]');
+    const dashboardLink = document.querySelector('[onclick="showPage(\'dashboard-page\')"]');
     const adminLink = document.getElementById('admin-link');
-
-    // Mobile nav links
-    const mobileHomeLink = document.getElementById('mobile-home-link');
-    const mobileDashboardLink = document.getElementById('mobile-dashboard-link');
-    const adminLinkMobile = document.getElementById('admin-link-mobile');
+    const adminLinkMobile = document.getElementById('admin-link-mobile'); // <-- ADD THIS
+    // --- ⬆️ (NEW) ----------------------- ⬆️ ---
 
     if (currentUser) {
-        // show header + greeting
+        // Show header and greet user
         header.classList.remove('hidden');
         header.classList.add('flex');
-
-        const greetEl = document.getElementById('user-greeting');
-        if (greetEl && currentUser.name) {
-            greetEl.textContent = currentUser.name.split(' ')[0];
-        }
-
+        document.getElementById('user-greeting').textContent = `${currentUser.name.split(' ')[0]}`;
+        
+        // --- ⬇️ THIS IS THE FIX ⬇️ ---
+        // Check role and show/hide the correct links on EVERY page load
         const isAdmin = currentUser.role === 'admin';
-
-        // Desktop nav visibility
+        
         if (homeLink) homeLink.classList.toggle('hidden', isAdmin);
         if (dashboardLink) dashboardLink.classList.toggle('hidden', isAdmin);
         if (adminLink) adminLink.classList.toggle('hidden', !isAdmin);
-
-        // Mobile nav visibility
-        if (mobileHomeLink) mobileHomeLink.classList.toggle('hidden', isAdmin);
-        if (mobileDashboardLink) mobileDashboardLink.classList.toggle('hidden', isAdmin);
-        if (adminLinkMobile) adminLinkMobile.classList.toggle('hidden', !isAdmin);
+        if (adminLinkMobile) adminLinkMobile.classList.toggle('hidden', !isAdmin); // <-- ADD THIS
+        // --- ⬆️ END OF FIX ⬆️ ---
 
     } else {
+        // No user, hide header
         header.classList.add('hidden');
         header.classList.remove('flex');
     }
 
-    // per-page logic
-    if (pageId === 'home-page') renderCourses();
-    if (pageId === 'dashboard-page' && currentUser) renderDashboard();
-    if (pageId === 'admin-page') showAdminSection('admin-overview');
-    if (pageId === 'profile-page') renderProfilePage();
+    // Load content for the specific page
+    if(pageId === 'home-page') renderCourses();
+    if(pageId === 'dashboard-page') renderDashboard();
+    if(pageId === 'admin-page') showAdminSection('admin-overview');
+    if(pageId === 'profile-page') renderProfilePage();
+    
+    // ⬇️ ADD THIS LINE ⬇️
+    // Always close the mobile menu after navigation
+    document.getElementById('mobile-menu').classList.add('hidden');
 }
+
+
+
+
+
+
 
 // --- AUTHENTICATION ---
 function showAuthView(viewName) {
-    const loginView = document.getElementById('login-view');
-    const registerView = document.getElementById('register-view');
+    // Hide all auth views
+    document.getElementById('login-view').classList.add('hidden');
+    document.getElementById('register-view').classList.add('hidden');
+    
+    // Make sure the otp-view element exists before trying to hide it
     const otpView = document.getElementById('otp-view');
-    const loginError = document.getElementById('login-error');
-    const registerError = document.getElementById('register-error');
+    if (otpView) {
+        otpView.classList.add('hidden');
+    }
+
+    // Clear all error messages
+    document.getElementById('login-error').textContent = '';
+    document.getElementById('register-error').textContent = '';
+    
     const otpError = document.getElementById('otp-error');
+    if (otpError) {
+        otpError.textContent = ''; // Clear OTP error
+    }
 
-    if (loginView) loginView.classList.add('hidden');
-    if (registerView) registerView.classList.add('hidden');
-    if (otpView) otpView.classList.add('hidden');
-
-    if (loginError) loginError.textContent = '';
-    if (registerError) registerError.textContent = '';
-    if (otpError) otpError.textContent = '';
-
-    if (viewName === 'login' && loginView) loginView.classList.remove('hidden');
-    if (viewName === 'register' && registerView) registerView.classList.remove('hidden');
-    if (viewName === 'otp' && otpView) otpView.classList.remove('hidden');
+    // Show the requested view
+    if (viewName === 'login') {
+        document.getElementById('login-view').classList.remove('hidden');
+    } else if (viewName === 'register') {
+        document.getElementById('register-view').classList.remove('hidden');
+    } else if (viewName === 'otp' && otpView) {
+        otpView.classList.remove('hidden');
+    }
 }
+
+
+
+
 
 async function handleLogin() {
     const email = document.getElementById('login-email').value;
     const password = document.getElementById('login-password').value;
     const errorEl = document.getElementById('login-error');
 
-    if (errorEl) errorEl.textContent = '';
-
     const response = await apiRequest('login.php', 'POST', { email, password });
-
-    if (!response || typeof response !== 'object') {
-        if (errorEl) errorEl.textContent = 'Unexpected server response.';
-        return;
-    }
 
     if (response.success) {
         currentUser = response.user;
         sessionStorage.setItem('currentUser', JSON.stringify(currentUser));
 
         if (currentUser.role === 'admin') {
+            // 🔥 Admin detected — show only admin dashboard
             showPage('admin-page');
             loadAdminStats();
-            showToast('Logged in as Admin', 'success');
+
+            // Hide unnecessary pages and navigation links
+            document.getElementById('home-page')?.classList.add('hidden');
+            document.getElementById('dashboard-page')?.classList.add('hidden');
+            document.getElementById('course-player-page')?.classList.add('hidden');
+
+            // Hide "Home" and "My Dashboard" links in header
+            document.querySelector('[onclick="showPage(\'home-page\')"]')?.classList.add('hidden');
+            document.querySelector('[onclick="showPage(\'dashboard-page\')"]')?.classList.add('hidden');
+
+            // Show admin nav link
+            document.getElementById('admin-link')?.classList.remove('hidden');
+
+            // Show header and hide auth page
+            document.getElementById('header').classList.remove('hidden');
+            document.getElementById('auth-page').classList.remove('active');
+            document.getElementById('auth-page').classList.add('hidden');
+
+            showToast('Logged in as Admin');
         } else {
+            // 🧑‍🎓 Normal user flow
             showPage('home-page');
-            showToast('Login successful', 'success');
         }
     } else {
-        if (errorEl) errorEl.textContent = response.message || 'Login failed.';
+        // --- ⬇️ THIS IS THE UPDATED PART ⬇️ ---
 
-        // If account is not verified, move to OTP view
-        if (response.message && response.message.toLowerCase().includes('not verified')) {
-            const otpEmail = document.getElementById('otp-email');
-            if (otpEmail) otpEmail.value = email;
+        // 1. Show the error message from the server
+        errorEl.textContent = response.message || 'Login failed.';
+        
+        // 2. (NEW) Check if the error is the "not verified" message
+        if (response.message && response.message.includes('not verified')) {
+            // If it is, redirect the user to the OTP form!
+            
+            // 3. Put the email they just typed into the hidden OTP form
+            document.getElementById('otp-email').value = email;
+            
+            // 4. Show the OTP verification view
             showAuthView('otp');
         }
+        
     }
 }
+
+
+
+
+
+
+// ✅ Prevent admin from seeing user pages like Home/Dashboard
+function restrictAdminAccess() {
+    if (currentUser && currentUser.role === 'admin') {
+        const userTabs = ['home-page', 'dashboard-page', 'course-player-page'];
+        userTabs.forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.remove();
+        });
+
+        const homeLink = document.getElementById('home-link');
+        const dashboardLink = document.getElementById('dashboard-link');
+        if (homeLink) homeLink.remove();
+        if (dashboardLink) dashboardLink.remove();
+    }
+}
+
+
+
+
 
 async function handleRegistration() {
     const name = document.getElementById('register-name').value;
@@ -217,122 +290,131 @@ async function handleRegistration() {
     const password = document.getElementById('register-password').value;
     const errorEl = document.getElementById('register-error');
 
-    if (errorEl) errorEl.textContent = '';
-
     const response = await apiRequest('register.php', 'POST', { name, email, password });
-
+    
     if (response.success) {
-        showToast(response.message || 'Registered successfully. Check your email.', 'success');
-        const otpEmail = document.getElementById('otp-email');
-        if (otpEmail) otpEmail.value = email;
+        // --- THIS IS THE UPDATED PART ---
+        // 1. Show the success toast from the server (e.g., "Check your email...")
+        showToast(response.message, 'success');
+        
+        // 2. Store the email in our new hidden OTP form
+        document.getElementById('otp-email').value = email;
+
+        // 3. Show the OTP verification view
         showAuthView('otp');
+        // --- END OF UPDATE ---
     } else {
-        if (errorEl) errorEl.textContent = response.message || 'Registration failed.';
+        errorEl.textContent = response.message || 'Registration failed.';
     }
 }
 
+
+
+
+// --- ADD THIS NEW FUNCTION ---
 async function handleVerifyOTP() {
     const email = document.getElementById('otp-email').value;
     const otp = document.getElementById('otp-code').value;
     const errorEl = document.getElementById('otp-error');
 
     if (!otp || otp.length !== 6) {
-        if (errorEl) errorEl.textContent = 'Please enter a valid 6-digit OTP.';
+        errorEl.textContent = 'Please enter a valid 6-digit OTP.';
         return;
     }
 
     const response = await apiRequest('verify_otp.php', 'POST', { email, otp });
 
     if (response.success) {
-        showToast(response.message || 'Account verified!', 'success');
+        // Success!
+        showToast(response.message, 'success');
+        
+        // Clear the form and send user to the login view
         document.getElementById('otp-code').value = '';
         document.getElementById('otp-email').value = '';
         showAuthView('login');
     } else {
-        if (errorEl) errorEl.textContent = response.message || 'OTP verification failed.';
+        // Failed
+        errorEl.textContent = response.message || 'OTP verification failed.';
     }
 }
 
-function logout() {
-    currentUser = null;
-    sessionStorage.removeItem('currentUser');
 
-    const loginEmail = document.getElementById('login-email');
-    const loginPassword = document.getElementById('login-password');
-    if (loginEmail) loginEmail.value = '';
-    if (loginPassword) loginPassword.value = '';
 
-    showPage('auth-page');
-}
+// --- ADD THESE NEW FUNCTIONS ---
 
-// --- PROFILE & PASSWORD ---
+// This fills the profile page with user data
 function renderProfilePage() {
     if (!currentUser) {
-        showPage('auth-page');
+        showPage('auth-page'); // Not logged in, send to login
         return;
     }
 
-    const nameEl = document.getElementById('profile-name');
-    const emailEl = document.getElementById('profile-email');
-    const errorEl = document.getElementById('password-error');
+    // Fill the text fields
+    document.getElementById('profile-name').innerText = currentUser.name;
+    document.getElementById('profile-email').innerText = currentUser.email;
 
-    if (nameEl) nameEl.innerText = currentUser.name;
-    if (emailEl) emailEl.innerText = currentUser.email;
-
-    if (errorEl) errorEl.innerText = '';
-
-    const cur = document.getElementById('current-password');
-    const n1 = document.getElementById('new-password');
-    const n2 = document.getElementById('confirm-password');
-    if (cur) cur.value = '';
-    if (n1) n1.value = '';
-    if (n2) n2.value = '';
+    // Clear any old password errors
+    document.getElementById('password-error').innerText = '';
+    document.getElementById('current-password').value = '';
+    document.getElementById('new-password').value = '';
+    document.getElementById('confirm-password').value = '';
 }
 
+// This handles the password change form
 async function handleChangePassword() {
     const currentPassword = document.getElementById('current-password').value;
     const newPassword = document.getElementById('new-password').value;
     const confirmPassword = document.getElementById('confirm-password').value;
     const errorEl = document.getElementById('password-error');
 
+    // Client-side validation
     if (newPassword !== confirmPassword) {
-        if (errorEl) errorEl.innerText = 'New passwords do not match.';
+        errorEl.innerText = 'New passwords do not match.';
         return;
     }
     if (newPassword.length < 6) {
-        if (errorEl) errorEl.innerText = 'Password must be at least 6 characters.';
+        errorEl.innerText = 'Password must be at least 6 characters.';
         return;
     }
 
     const response = await apiRequest('change_password.php', 'POST', {
         userId: currentUser.id,
-        currentPassword,
-        newPassword
+        currentPassword: currentPassword,
+        newPassword: newPassword
     });
 
     if (response.success) {
         showToast('Password updated successfully!', 'success');
+        // Clear the form
         document.getElementById('current-password').value = '';
         document.getElementById('new-password').value = '';
         document.getElementById('confirm-password').value = '';
-        if (errorEl) errorEl.innerText = '';
+        errorEl.innerText = '';
     } else {
-        if (errorEl) errorEl.innerText = response.message || 'An error occurred.';
+        errorEl.innerText = response.message || 'An error occurred.';
     }
 }
 
-// --- DELETE ACCOUNT MODAL ---
-function showDeleteAccountModal() {
-    const userMenu = document.getElementById('user-menu');
-    if (userMenu) userMenu.classList.add('hidden');
 
+
+// --- ADD THESE THREE NEW FUNCTIONS ---
+
+function showDeleteAccountModal() {
+    // First, close the user menu if it's open
+    document.getElementById('user-menu').classList.add('hidden');
+    
+    // Then, show the modal
     const modal = document.getElementById('delete-modal');
-    if (modal) modal.classList.remove('hidden');
+    if (modal) {
+        modal.classList.remove('hidden');
+    }
 }
 
 function hideDeleteAccountModal() {
     const modal = document.getElementById('delete-modal');
-    if (modal) modal.classList.add('hidden');
+    if (modal) {
+        modal.classList.add('hidden');
+    }
 }
 
 async function handleDeleteAccount() {
@@ -341,55 +423,77 @@ async function handleDeleteAccount() {
         return;
     }
 
+    // Send the request to your 'delete_account.php' script
     const response = await apiRequest('delete_account.php', 'POST', { userId: currentUser.id });
 
     if (response.success) {
         showToast('Your account has been successfully deleted.', 'success');
+        // Hide the modal and log the user out
         hideDeleteAccountModal();
-        logout();
+        logout(); // Call logout to clear session and go to login page
     } else {
         showToast(response.message || 'An error occurred.', 'error');
         hideDeleteAccountModal();
     }
 }
 
-// --- UI TOGGLES ---
+
+
+
+function logout() {
+    currentUser = null;
+    sessionStorage.removeItem('currentUser');
+
+    // --- ⬇️ ADD THESE TWO LINES ⬇️ ---
+    document.getElementById('login-email').value = '';
+    document.getElementById('login-password').value = '';
+    // --- ⬆️ END OF FIX ⬆️ ---
+    showPage('auth-page');
+}
+
+
+// --- ADD THIS NEW FUNCTION ---
 function togglePasswordVisibility(inputId, iconId) {
     const input = document.getElementById(inputId);
     const icon = document.getElementById(iconId);
 
-    if (!input || !icon) return;
-
     if (input.type === 'password') {
+        // Show password
         input.type = 'text';
         icon.classList.remove('fa-eye');
         icon.classList.add('fa-eye-slash');
     } else {
+        // Hide password
         input.type = 'password';
         icon.classList.remove('fa-eye-slash');
         icon.classList.add('fa-eye');
     }
 }
 
-function toggleUserMenu() {
-    const menu = document.getElementById('user-menu');
-    if (menu) menu.classList.toggle('hidden');
+// ⬇️ ADD THIS NEW FUNCTION ⬇️
+function toggleMobileMenu() {
+    document.getElementById('mobile-menu').classList.toggle('hidden');
 }
 
-function toggleMobileMenu() {
-    const menu = document.getElementById('mobile-nav');
-    if (menu) menu.classList.toggle('hidden');
+
+function toggleUserMenu() { 
+    document.getElementById('user-menu').classList.toggle('hidden'); 
 }
 
 // --- COURSE & DASHBOARD RENDERING ---
 async function renderCourses(filter = '') {
+    // ✅ Trim the search text safely
     filter = (filter || '').toString().trim();
+
+    // ✅ Prevent errors if user is not logged in yet
     const userId = (currentUser && currentUser.id) ? currentUser.id : 0;
+
+    // ✅ Encode filter to avoid URL issues (spaces, symbols, etc.)
     const encodedFilter = encodeURIComponent(filter);
 
+    // ✅ Make the API call safely
     const response = await apiRequest(`courses.php?search=${encodedFilter}&userId=${userId}`);
 
-    if (!courseListContainer) return;
     courseListContainer.innerHTML = '';
 
     if (!response.success || !response.courses || response.courses.length === 0) {
@@ -424,20 +528,17 @@ async function renderCourses(filter = '') {
     });
 }
 
+
+
 async function renderDashboard() {
-    if (!currentUser) return;
     const response = await apiRequest(`courses.php?enrolledOnly=true&userId=${currentUser.id}`);
-
-    if (!enrolledCoursesContainer) return;
     enrolledCoursesContainer.innerHTML = '';
-
-    if (!response.success || !response.courses || response.courses.length === 0) {
+    if(!response.success || response.courses.length === 0) {
         enrolledCoursesContainer.innerHTML = '<p class="text-slate-500 col-span-full text-center">You are not enrolled in any courses yet. <a href="#" onclick="showPage(\'home-page\')" class="text-indigo-600 hover:underline font-semibold">Browse courses now!</a></p>';
         return;
     }
-
     response.courses.forEach(course => {
-        const card = `
+         const card = `
             <div class="bg-white rounded-xl shadow-lg overflow-hidden group">
                 <img src="${course.image}" alt="${course.title}" class="w-full h-40 object-cover">
                 <div class="p-5">
@@ -453,16 +554,10 @@ async function renderDashboard() {
 }
 
 async function toggleEnrollment(courseId) {
-    if (!currentUser) {
-        showToast('Please log in to enroll.', 'error');
-        return;
-    }
-    const response = await apiRequest('enrollments.php', 'POST', { userId: currentUser.id, courseId });
-
+    const response = await apiRequest('enrollments.php', 'POST', { userId: currentUser.id, courseId: courseId });
     if (response.success) {
         showToast(response.message, 'success');
-        renderCourses(searchBar ? searchBar.value : '');
-        if (currentCourseId) renderDashboard();
+        renderCourses(searchBar.value);
     } else {
         showToast(response.message || 'Operation failed.', 'error');
     }
@@ -472,16 +567,14 @@ async function toggleEnrollment(courseId) {
 async function openCoursePlayer(courseId) {
     currentCourseId = courseId;
     const response = await apiRequest(`lessons.php?courseId=${courseId}`);
-
     if (!response.success) {
         showToast('Could not load course content.', 'error');
         return;
     }
-
+    
     const { course, lessons } = response;
-    if (courseTitleSidebarEl) courseTitleSidebarEl.textContent = course.title;
-
-    if (curriculumSidebar) curriculumSidebar.innerHTML = '';
+    courseTitleSidebarEl.textContent = course.title;
+    curriculumSidebar.innerHTML = '';
     lessons.forEach((lesson, index) => {
         const icon = lesson.type === 'video' ? 'fa-play-circle' : 'fa-question-circle';
         const item = `
@@ -489,9 +582,8 @@ async function openCoursePlayer(courseId) {
                 <i class="fas ${icon} text-slate-500"></i>
                 <span class="text-sm font-medium">${lesson.title}</span>
             </div>`;
-        if (curriculumSidebar) curriculumSidebar.innerHTML += item;
+        curriculumSidebar.innerHTML += item;
     });
-
     window.courseData = { course, lessons };
     showPage('course-player-page');
     loadLesson(0);
@@ -500,45 +592,45 @@ async function openCoursePlayer(courseId) {
 function loadLesson(lessonIndex) {
     if (!window.courseData) return;
     currentLessonIndex = lessonIndex;
-
-    const items = document.querySelectorAll('#curriculum-sidebar > div');
-    items.forEach((el, idx) => {
+    
+    document.querySelectorAll('#curriculum-sidebar > div').forEach((el, idx) => {
         el.classList.toggle('bg-indigo-100', idx === lessonIndex);
-        const icon = el.querySelector('i');
-        if (icon) {
-            icon.classList.toggle('text-indigo-600', idx === lessonIndex);
-            icon.classList.toggle('text-slate-500', idx !== lessonIndex);
-        }
+        el.querySelector('i').classList.toggle('text-indigo-600', idx === lessonIndex);
+        el.querySelector('i').classList.toggle('text-slate-500', idx !== lessonIndex);
     });
 
     const { lessons } = window.courseData;
     const lesson = lessons[lessonIndex];
-
-    if (lessonTitleEl) lessonTitleEl.textContent = lesson.title;
+    lessonTitleEl.textContent = lesson.title;
 
     if (lesson.type === 'video') {
         lessonContentArea.innerHTML = `<div class="aspect-video"><iframe src="${lesson.content}?autoplay=1&mute=1&modestbranding=1&rel=0" frameborder="0" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe></div>`;
     } else if (lesson.type === 'quiz') {
-        let quizData = lesson.content;
-        if (typeof quizData === 'string') {
-            try {
-                quizData = JSON.parse(quizData);
-            } catch (e) {
-                console.error("Quiz JSON parsing error:", e, "Raw content:", lesson.content);
-                lessonContentArea.innerHTML = `<div class="p-6 text-red-600">
-                    <h3 class="font-bold">Error Loading Quiz</h3>
-                    <p>Could not load the quiz because the data is malformed.</p>
-                </div>`;
-                return;
+        try {
+            let quizData = lesson.content;
+            if (typeof quizData === "string") {
+                try {
+                    quizData = JSON.parse(quizData);
+                } catch (e) {
+                    console.error("Quiz JSON parsing error:", e, "Raw content:", lesson.content);
+                    alert("Error Loading Quiz\nCould not load the quiz because the data is malformed.");
+                    return;
+                }
             }
+            renderQuiz(quizData);
+        } catch(e) {
+            console.error("Quiz JSON parsing error:", e, "Raw content:", lesson.content);
+            lessonContentArea.innerHTML = `<div class="p-6 text-red-600">
+                <h3 class="font-bold">Error Loading Quiz</h3>
+                <p>Could not load the quiz because the data is malformed. Please check the console for technical details.</p>
+            </div>`;
         }
-        renderQuiz(quizData);
     }
 }
 
 function returnToCoursePlayer() {
-    showPage('course-player-page');
-    loadLesson(currentLessonIndex);
+     showPage('course-player-page');
+     loadLesson(currentLessonIndex);
 }
 
 // --- QUIZ FUNCTIONALITY ---
@@ -555,13 +647,14 @@ function renderQuiz(questions) {
     lessonContentArea.innerHTML = quizHTML;
 }
 
+// --- QUIZ SUBMIT & EVALUATION ---
 function submitQuiz() {
     const lesson = window.courseData.lessons[currentLessonIndex];
     if (!lesson || lesson.type !== 'quiz') return;
 
     let questions = lesson.content;
     if (typeof questions === 'string') {
-        try { questions = JSON.parse(questions); }
+        try { questions = JSON.parse(questions); } 
         catch (e) { console.error('Failed to parse quiz on submit:', e); return; }
     }
 
@@ -571,69 +664,12 @@ function submitQuiz() {
         userAnswers.push(selected ? parseInt(selected.value) : null);
     });
 
+    console.log("Submitting quiz with:", { questions, userAnswers });
     renderQuizEvaluation(questions, userAnswers);
     showPage('quiz-evaluation-page');
 }
 
-function renderQuizEvaluation(questions, userAnswers) {
-    const evalContainer = document.getElementById('evaluation-content');
-    const summary = document.getElementById('quiz-result-summary');
-
-    if (!evalContainer) {
-        console.error("evaluation-content container not found!");
-        return;
-    }
-
-    evalContainer.innerHTML = "";
-
-    if (!questions || !questions.length) {
-        evalContainer.innerHTML = "<p>No quiz data found. Please try again.</p>";
-        return;
-    }
-
-    let score = 0;
-    const total = questions.length;
-
-    questions.forEach((q, i) => {
-        const userAns = userAnswers[i];
-        const correctAns = q.answer ?? q.ans ?? q.correctAnswer ?? null;
-
-        const userAnswerText = (userAns !== null && q.opts && q.opts[userAns] !== undefined)
-            ? String(q.opts[userAns]).trim()
-            : "Not Answered";
-
-        const correctAnswerText = (q.opts && q.opts[correctAns] !== undefined)
-            ? String(q.opts[correctAns]).trim()
-            : "Unknown";
-
-        const isCorrect = userAns === correctAns;
-
-        if (isCorrect) score++;
-
-        evalContainer.innerHTML += `
-            <div class="p-6 border rounded-xl mb-4 ${isCorrect ? 'bg-green-50 border-green-300' : 'bg-red-50 border-red-300'}">
-                <h3 class="font-semibold mb-2">Q${i + 1}. ${q.q}</h3>
-                <p><b>Your Answer:</b> 
-                    <span class="${isCorrect ? 'text-green-600' : 'text-red-600'}">${userAnswerText}</span>
-                </p>
-                <p><b>Correct Answer:</b> ${correctAnswerText}</p>
-
-                ${q.explanation || q.exp || q.explain ? 
-                `<div class="mt-3 p-3 bg-yellow-50 border-l-4 border-yellow-400 rounded">
-                    <b>Explanation:</b> ${q.explanation || q.exp || q.explain}
-                </div>` 
-                : ''}
-            </div>
-        `;
-    });
-
-    const percent = ((score / total) * 100).toFixed(2);
-    if (summary) {
-        summary.innerHTML = `You scored <b>${score}</b> out of <b>${total}</b> (${percent}%)`;
-    }
-}
-
-// --- TOAST / NOTIFICATION ---
+// --- TOAST / NOTIFICATION HELPER ---
 function showToast(message, type = 'info') {
     let toastContainer = document.getElementById('toast-container');
     if (!toastContainer) {
@@ -681,45 +717,48 @@ function showToast(message, type = 'info') {
     }, 2500);
 }
 
-// --- ADMIN STATS ---
+// 🆕 --- ADMIN STATS FETCH FUNCTION ---
 async function loadAdminStats() {
+  try {
     const data = await apiRequest('admin_stats.php');
+    console.log("✅ Admin Stats Response:", data);
 
-    if (!data || !data.success || !data.stats) {
-        console.error("Invalid admin stats data:", data);
-        showToast("Invalid data from server.", "error");
-        return;
-    }
+    if (data && data.success && data.stats) {
+      // ✅ Update numeric stats
+      document.getElementById("total-users").textContent = data.stats.totalUsers || 0;
+      document.getElementById("total-courses").textContent = data.stats.totalCourses || 0;
+      document.getElementById("total-enrollments").textContent = data.stats.totalEnrollments || 0;
 
-    document.getElementById("total-users").textContent = data.stats.totalUsers || 0;
-    document.getElementById("total-courses").textContent = data.stats.totalCourses || 0;
-    document.getElementById("total-enrollments").textContent = data.stats.totalEnrollments || 0;
+      // ✅ Destroy previous chart instance if exists
+        if (window.enrollmentChartInstance) {
+            window.enrollmentChartInstance.destroy();
+        }
 
-    if (enrollmentChartInstance) {
-        enrollmentChartInstance.destroy();
-    }
-
+    // ✅ Make sure canvas element exists
     const canvas = document.getElementById("enrollmentChart");
     if (!canvas) {
-        console.error("Canvas #enrollmentChart not found");
+        console.error("Canvas element #enrollmentChart not found!");
         return;
     }
 
+    // ✅ Get 2D context (no red error now)
     const ctx = canvas.getContext("2d");
 
+    // 🌈 Create rainbow gradient colors for each bar
     const gradients = [
-        ["#ff6384", "#ff9aa2"],
-        ["#36a2eb", "#9ad0f5"],
-        ["#ffcd56", "#ffe29a"],
-        ["#4bc0c0", "#9be7e7"],
-        ["#9966ff", "#cbb2ff"],
-        ["#ff9f40", "#ffd3a6"],
-        ["#00b894", "#55efc4"],
-        ["#fd79a8", "#fab1a0"],
-        ["#0984e3", "#74b9ff"],
-        ["#e84393", "#fd79a8"]
+        ["#ff6384", "#ff9aa2"], // Pink
+        ["#36a2eb", "#9ad0f5"], // Blue
+        ["#ffcd56", "#ffe29a"], // Yellow
+        ["#4bc0c0", "#9be7e7"], // Teal
+        ["#9966ff", "#cbb2ff"], // Purple
+        ["#ff9f40", "#ffd3a6"], // Orange
+        ["#00b894", "#55efc4"], // Green
+        ["#fd79a8", "#fab1a0"], // Coral
+        ["#0984e3", "#74b9ff"], // Sky Blue
+        ["#e84393", "#fd79a8"]  // Rose
     ];
 
+    // ✅ Generate gradient fills dynamically for each bar
     const barColors = data.chartData.map((_, i) => {
         const g = ctx.createLinearGradient(0, 0, 0, 400);
         const [start, end] = gradients[i % gradients.length];
@@ -728,7 +767,7 @@ async function loadAdminStats() {
         return g;
     });
 
-    enrollmentChartInstance = new Chart(ctx, {
+    window.enrollmentChartInstance = new Chart(ctx, {
         type: "bar",
         data: {
             labels: data.chartData.map(item => item.courseTitle),
@@ -770,119 +809,278 @@ async function loadAdminStats() {
             }
         }
     });
+
+
+
+
+
+
+    } else {
+      console.error("❌ Invalid data format:", data);
+      showToast("Invalid data format from server.", "error");
+    }
+  } catch (error) {
+    console.error("❌ Error fetching admin stats:", error);
+    showToast("Failed to load admin stats. Check console.", "error");
+  }
 }
 
-// --- ADMIN SECTIONS ---
-function showAdminSection(sectionId) {
-    document.querySelectorAll(".admin-section").forEach(sec => {
-        sec.classList.add("hidden");
-        sec.classList.remove("active");
-    });
 
-    document.querySelectorAll(".admin-nav-link").forEach(link => {
-        link.classList.remove("bg-indigo-100");
-        link.classList.add("hover:bg-indigo-50");
-    });
+// ✅ --- ADMIN SECTION CONTROL (Final Polished Version) ---
+function showAdminSection(section) {
+  // Hide all admin sections
+  document.querySelectorAll('.admin-section').forEach(sec => {
+    sec.classList.add('hidden');
+  });
 
-    const target = document.getElementById(sectionId);
-    if (!target) {
-        console.error(`Section "${sectionId}" not found`);
-        return;
-    }
+  // Show selected section
+  const activeSection = document.getElementById(`admin-${section}`);
+  if (activeSection) activeSection.classList.remove('hidden');
 
-    target.classList.remove("hidden");
-    target.classList.add("active");
+  // Update active sidebar button
+  document.querySelectorAll('.admin-nav-link').forEach(link => {
+    link.classList.remove('bg-indigo-100');
+  });
+  const activeLink = document.querySelector(`[onclick="showAdminSection('${section}')"]`);
+  if (activeLink) activeLink.classList.add('bg-indigo-100');
 
-    const activeLink = document.querySelector(`[onclick="showAdminSection('${sectionId}')"]`);
-    if (activeLink) {
-        activeLink.classList.add("bg-indigo-100");
-        activeLink.classList.remove("hover:bg-indigo-50");
-    }
-
-    if (sectionId === "admin-overview") loadAdminStats();
-    if (sectionId === "admin-users") renderAdminUsers();
-    if (sectionId === "admin-courses") renderAdminCourses();
+  // Load data for selected tab
+  if (section === 'overview') {
+    loadAdminStats();
+  } else if (section === 'users') {
+    renderAdminUsers();
+  } else if (section === 'courses') {
+    renderAdminCourses();
+  }
 }
 
+
+
+
+// ✅ --- RENDER USERS TABLE ---
 async function renderAdminUsers() {
+  try {
     const data = await apiRequest('admin_users.php');
-    const container = document.getElementById('user-list');
-    if (!container) return;
+    console.log("✅ Users API Response:", data);
 
-    container.innerHTML = '';
+    const container = document.getElementById('user-list');
+    if (!container) {
+      console.error("❌ user-list element not found!");
+      return;
+    }
+
+    container.innerHTML = ''; // Clear old content
 
     if (!data.success || !data.users || data.users.length === 0) {
-        container.innerHTML = `
+      container.innerHTML = `
         <tr>
-          <td colspan="5" class="text-center text-gray-500 py-4">No users found.</td>
-        </tr>`;
-        return;
+          <td colspan="5" class="text-center text-gray-500 py-4">No users found.</td> </tr>`;
+      return;
     }
 
-    data.users.forEach((user, index) => {
-        const row = document.createElement('tr');
-        row.className = 'border-b hover:bg-slate-50 transition';
-        row.innerHTML = `
-        <td class="p-4">${index + 1}</td>
-        <td class="p-4">${user.id}</td>
-        <td class="p-4 font-semibold">${user.name}</td>
-        <td class="p-4">${user.email}</td>
-        <td class="p-4 capitalize">${user.role}</td>`;
-        container.appendChild(row);
+    // ✅ Render all users
+    data.users.forEach((user, index) => { // ADDED "index" HERE
+      const row = document.createElement('tr');
+      row.className = 'border-b hover:bg-slate-50 transition';
+      
+      // --- ⬇️ UPDATED THIS BLOCK ⬇️ ---
+      row.innerHTML = `
+        <td class="p-4" data-label="Sl. No.">${index + 1}</td>
+        <td class="p-4" data-label="User ID">${user.id}</td>
+        <td class="p-4 font-semibold" data-label="Name">${user.name}</td>
+        <td class="p-4" data-label="Email">${user.email}</td>
+        <td class="p-4 capitalize" data-label="Role">${user.role}</td>
+      `;
+      // --- ⬆️ END OF UPDATE ⬆️ ---
+      
+      container.appendChild(row);
     });
+
+  } catch (error) {
+    console.error("❌ Error rendering users:", error);
+  }
 }
 
-async function renderAdminCourses(searchTerm = '') {
-    const container = document.getElementById('course-list-admin');
-    if (!container) return;
 
-    const data = await apiRequest('courses.php');
+
+
+// ✅ Render Admin Courses with Search by Title or Category
+async function renderAdminCourses(searchTerm = '') {
+  try {
+    // --- ⬇️ UPDATED THIS LINE ⬇️ ---
+    // We can just call the courses.php with an 'admin=true' flag
+    const data = await apiRequest(`courses.php?admin=true&search=${encodeURIComponent(searchTerm)}`);
+    const container = document.getElementById('course-list-admin');
     container.innerHTML = '';
 
     if (!data.success || !data.courses || data.courses.length === 0) {
-        container.innerHTML = `
+      container.innerHTML = `
         <tr>
           <td colspan="4" class="text-center text-slate-500 py-4">
             No courses available.
           </td>
         </tr>`;
-        return;
+      return;
     }
 
-    const enrollData = await apiRequest('enrollments.php');
-    const enrollments = enrollData.success ? enrollData.enrollments : [];
+    // --- ⬇️ DELETED THE SECOND API CALL ⬇️ ---
+    // No longer need to fetch enrollments separately
 
-    const term = (searchTerm || '').toLowerCase();
-    const filteredCourses = data.courses.filter(course => {
-        return (
-            course.title.toLowerCase().includes(term) ||
-            (course.category && course.category.toLowerCase().includes(term))
-        );
-    });
-
-    if (filteredCourses.length === 0) {
-        container.innerHTML = `
-        <tr>
-          <td colspan="4" class="text-center text-slate-500 py-4">
-            No matching courses found.
-          </td>
-        </tr>`;
-        return;
-    }
-
-    filteredCourses.forEach(course => {
-        const count = enrollments.filter(e => e.courseId == course.id).length;
-        container.innerHTML += `
+    // Render filtered courses
+    data.courses.forEach((course, index) => {
+      // --- ⬇️ UPDATED THIS BLOCK ⬇️ ---
+      container.innerHTML += `
         <tr class="border-b hover:bg-slate-50 transition">
-          <td class="p-4">${course.id}</td>
-          <td class="p-4 font-semibold">${course.title}</td>
-          <td class="p-4">${course.category || '—'}</td>
-          <td class="p-4">${count}</td>
+          <td class="p-4" data-label="ID">${course.id}</td>
+          <td class="p-4 font-semibold" data-label="Title">${course.title}</td>
+          <td class="p-4" data-label="Category">${course.category || '—'}</td>
+          <td class="p-4" data-label="Enrollments">${course.enrollments}</td>
         </tr>`;
+      // --- ⬆️ END OF UPDATE ⬆️ ---
     });
+  } catch (error) {
+    console.error('❌ Error rendering admin courses:', error);
+    const container = document.getElementById('course-list-admin');
+    container.innerHTML = `
+      <tr>
+        <td colspan="4" class="text-center text-red-500 py-4">
+          Failed to load courses. Please try again later.
+        </td>
+      </tr>`;
+  }
 }
 
-// --- MAKE FUNCTIONS GLOBAL (for inline HTML handlers) ---
+// ✅ Attach event listener AFTER DOM is loaded
+document.addEventListener('DOMContentLoaded', () => {
+  const searchInput = document.getElementById('course-search-bar-admin');
+  if (searchInput) {
+    searchInput.addEventListener('input', (e) => {
+      renderAdminCourses(e.target.value.trim());
+    });
+  }
+
+  // Initial load
+  renderAdminCourses();
+});
+
+
+// 🎯 Real-time admin course search
+document.getElementById('admin-course-search')?.addEventListener('input', (e) => {
+  renderAdminCourses(e.target.value);
+});
+
+
+
+
+
+
+function showAdminSection(sectionId) {
+  // Hide all admin sections
+  document.querySelectorAll(".admin-section").forEach(sec => {
+    sec.classList.add("hidden");
+    sec.classList.remove("active");
+  });
+
+  // Highlight correct sidebar button
+  document.querySelectorAll(".admin-nav-link").forEach(link => {
+    link.classList.remove("bg-indigo-100");
+    link.classList.add("hover:bg-indigo-50");
+  });
+
+  const target = document.getElementById(sectionId);
+  if (!target) {
+    console.error(`❌ Section with ID "${sectionId}" not found!`);
+    return;
+  }
+
+  // Show the selected section
+  target.classList.remove("hidden");
+  target.classList.add("active");
+
+  // Highlight the active sidebar link
+  const activeLink = document.querySelector(`[onclick="showAdminSection('${sectionId}')"]`);
+  if (activeLink) {
+    activeLink.classList.add("bg-indigo-100");
+    activeLink.classList.remove("hover:bg-indigo-50");
+  }
+
+  // Load corresponding data
+  if (sectionId === "admin-overview") loadAdminStats();
+  if (sectionId === "admin-users") renderAdminUsers();
+  if (sectionId === "admin-courses") renderAdminCourses();
+}
+
+
+
+
+function renderQuizEvaluation(questions, userAnswers) {
+    console.log("renderQuizEvaluation called", { questions, userAnswers });
+
+    const evalContainer = document.getElementById('evaluation-content');
+    const summary = document.getElementById('quiz-result-summary');
+
+    if (!evalContainer) {
+        console.error("❌ evaluation-content container not found!");
+        return;
+    }
+
+    evalContainer.innerHTML = ""; // clear previous results
+
+    if (!questions || !questions.length) {
+        evalContainer.innerHTML = "<p>No quiz data found. Please try again.</p>";
+        return;
+    }
+
+    // Calculate score
+    let score = 0;
+    const total = questions.length;
+
+    questions.forEach((q, i) => {
+        const userAns = userAnswers[i];
+        const correctAns = q.answer ?? q.ans ?? q.correctAnswer ?? null;
+
+        const userAnswerText = (userAns !== null && q.opts && q.opts[userAns] !== undefined)
+            ? String(q.opts[userAns]).trim()
+            : "Not Answered";
+
+        const correctAnswerText = (q.opts && q.opts[correctAns] !== undefined)
+            ? String(q.opts[correctAns]).trim()
+            : "Unknown";
+
+        const isCorrect = userAns === correctAns;
+
+        if (isCorrect) score++;
+
+        evalContainer.innerHTML += `
+            <div class="p-6 border rounded-xl mb-4 ${isCorrect ? 'bg-green-50 border-green-300' : 'bg-red-50 border-red-300'}">
+                <h3 class="font-semibold mb-2">Q${i + 1}. ${q.q}</h3>
+                <p><b>Your Answer:</b> 
+                    <span class="${isCorrect ? 'text-green-600' : 'text-red-600'}">${userAnswerText}</span>
+                </p>
+                <p><b>Correct Answer:</b> ${correctAnswerText}</p>
+
+                ${q.explanation || q.exp || q.explain ? 
+                `<div class="mt-3 p-3 bg-yellow-50 border-l-4 border-yellow-400 rounded">
+                    <b>Explanation:</b> ${q.explanation || q.exp || q.explain}
+                </div>` 
+                : ''}
+            </div>
+        `;
+    });
+
+    const percent = ((score / total) * 100).toFixed(2);
+    summary.innerHTML = `You scored <b>${score}</b> out of <b>${total}</b> (${percent}%)`;
+
+    console.log("✅ Rendered Quiz Evaluation successfully");
+}
+
+
+
+
+
+
+
+// --- MAKE FUNCTIONS GLOBAL ---
 window.submitQuiz = submitQuiz;
 window.returnToCoursePlayer = returnToCoursePlayer;
 window.loadLesson = loadLesson;
@@ -894,11 +1092,13 @@ window.renderCourses = renderCourses;
 window.renderAdminUsers = renderAdminUsers;
 window.renderAdminCourses = renderAdminCourses;
 
-window.showAuthView = showAuthView;
+// --- ADD THESE NEW FUNCTIONS ---
+window.showAuthView = showAuthView; 
 window.handleRegistration = handleRegistration;
 window.handleLogin = handleLogin;
-window.handleVerifyOTP = handleVerifyOTP;
+window.handleVerifyOTP = handleVerifyOTP; 
 window.logout = logout;
+window.loginAsAdmin = loginAsAdmin;
 window.toggleUserMenu = toggleUserMenu;
 window.togglePasswordVisibility = togglePasswordVisibility;
 window.handleChangePassword = handleChangePassword;
